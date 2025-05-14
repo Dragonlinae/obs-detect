@@ -22,6 +22,13 @@ struct filter_data {
 	bool maskingEnabled;
 	std::string maskingType;
 	int maskingColor;
+	std::string maskingScene;
+	std::string maskingSource;
+	float maskingSourceXFac;
+	float maskingSourceYFac;
+	float maskingSourceXOffset;
+	float maskingSourceYOffset;
+	std::string maskingSourceBoundAnchor;
 	int maskingBlurRadius;
 	int maskingDilateIterations;
 	bool trackingEnabled;
