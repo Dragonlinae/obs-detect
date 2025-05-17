@@ -337,17 +337,46 @@ obs_properties_t *detect_filter_properties(void *data)
 		},
 		scene);
 
-	obs_property_set_modified_callback(
+	obs_property_set_modified_callback2(
 		scene,
-		[](obs_properties_t *props_, obs_property_t *, obs_data_t *settings) -> bool {
+		[](void *priv, obs_properties_t *props_, obs_property_t *,
+		   obs_data_t *settings) -> bool {
+			struct detect_filter *tf = reinterpret_cast<detect_filter *>(priv);
 			obs_property_t *source = obs_properties_get(props_, "masking_source");
 			obs_property_list_clear(source);
 			obs_property_list_add_string(source, obs_module_text(""), "");
 			const char *scene_name = obs_data_get_string(settings, "masking_scene");
-			obs_scene_enum_items(obs_get_scene_by_name(scene_name), add_source_items,
-					     props_);
+
+			if (tf->maskingScene) {
+				obs_scene_release(tf->maskingScene);
+				tf->maskingScene = nullptr;
+			}
+			tf->maskingScene = obs_get_scene_by_name(scene_name);
+			obs_scene_enum_items(tf->maskingScene, add_source_items, props_);
 			return true;
-		});
+		},
+		tf);
+
+	obs_property_set_modified_callback2(
+		source,
+		[](void *priv, obs_properties_t *props_, obs_property_t *,
+		   obs_data_t *settings) -> bool {
+			struct detect_filter *tf = reinterpret_cast<detect_filter *>(priv);
+			if (tf->maskingSource) {
+				obs_source_release(tf->maskingSource);
+				tf->maskingSource = nullptr;
+			}
+			if (tf->maskingSceneItem) {
+				obs_sceneitem_release(tf->maskingSceneItem);
+				tf->maskingSceneItem = nullptr;
+			}
+			tf->maskingSource = obs_get_source_by_name(
+				obs_data_get_string(settings, "masking_source"));
+			tf->maskingSceneItem = obs_scene_sceneitem_from_source(tf->maskingScene,
+									       tf->maskingSource);
+			return true;
+		},
+		tf);
 
 	// add slider for dilation iterations
 	obs_properties_add_int_slider(masking_group, "dilation_iterations",
@@ -605,8 +634,8 @@ void detect_filter_update(void *data, obs_data_t *settings)
 	tf->maskingEnabled = obs_data_get_bool(settings, "masking_group");
 	tf->maskingType = obs_data_get_string(settings, "masking_type");
 	tf->maskingColor = (int)obs_data_get_int(settings, "masking_color");
-	tf->maskingScene = obs_data_get_string(settings, "masking_scene");
-	tf->maskingSource = obs_data_get_string(settings, "masking_source");
+	tf->maskingSceneName = obs_data_get_string(settings, "masking_scene");
+	tf->maskingSourceName = obs_data_get_string(settings, "masking_source");
 	tf->maskingSourceXFac = (float)obs_data_get_double(settings, "masking_source_xfac");
 	tf->maskingSourceYFac = (float)obs_data_get_double(settings, "masking_source_yfac");
 	tf->maskingSourceXOffset = (float)obs_data_get_double(settings, "masking_source_xoffset");
@@ -866,6 +895,9 @@ void detect_filter_activate(void *data)
 	obs_log(LOG_INFO, "Detect filter activated");
 	struct detect_filter *tf = reinterpret_cast<detect_filter *>(data);
 	tf->isDisabled = false;
+	tf->maskingScene = obs_get_scene_by_name(tf->maskingSceneName.c_str());
+	tf->maskingSource = obs_get_source_by_name(tf->maskingSourceName.c_str());
+	tf->maskingSceneItem = obs_scene_sceneitem_from_source(tf->maskingScene, tf->maskingSource);
 }
 
 void detect_filter_deactivate(void *data)
@@ -873,6 +905,19 @@ void detect_filter_deactivate(void *data)
 	obs_log(LOG_INFO, "Detect filter deactivated");
 	struct detect_filter *tf = reinterpret_cast<detect_filter *>(data);
 	tf->isDisabled = true;
+
+	if (tf->maskingScene) {
+		obs_scene_release(tf->maskingScene);
+		tf->maskingScene = nullptr;
+	}
+	if (tf->maskingSource) {
+		obs_source_release(tf->maskingSource);
+		tf->maskingSource = nullptr;
+	}
+	if (tf->maskingSceneItem) {
+		obs_sceneitem_release(tf->maskingSceneItem);
+		tf->maskingSceneItem = nullptr;
+	}
 }
 
 /**                   FILTER CORE                     */
@@ -933,6 +978,20 @@ void detect_filter_destroy(void *data)
 		gs_effect_destroy(tf->kawaseBlurEffect);
 		gs_effect_destroy(tf->maskingEffect);
 		obs_leave_graphics();
+
+		if (tf->maskingScene) {
+			obs_scene_release(tf->maskingScene);
+			tf->maskingScene = nullptr;
+		}
+		if (tf->maskingSource) {
+			obs_source_release(tf->maskingSource);
+			tf->maskingSource = nullptr;
+		}
+		if (tf->maskingSceneItem) {
+			obs_sceneitem_release(tf->maskingSceneItem);
+			tf->maskingSceneItem = nullptr;
+		}
+
 		tf->~detect_filter();
 		bfree(tf);
 	}
@@ -1100,10 +1159,13 @@ void detect_filter_video_tick(void *data, float seconds)
 			}
 			if (tf->maskingType == "source") {
 				obs_scene_t *maskingScene =
-					obs_get_scene_by_name(tf->maskingScene.c_str());
+					obs_get_scene_by_name(tf->maskingSceneName.c_str());
 				obs_source_t *maskingSource =
-					obs_get_source_by_name(tf->maskingSource.c_str());
+					obs_get_source_by_name(tf->maskingSourceName.c_str());
 				if (maskingSource && maskingScene) {
+					obs_sceneitem_t *maskingSceneItem =
+						obs_scene_sceneitem_from_source(maskingScene,
+										maskingSource);
 					if (objects.size() > 0) {
 						Object obj = objects[0];
 						vec2 maskPos = {(float)obj.rect.x,
@@ -1140,20 +1202,12 @@ void detect_filter_video_tick(void *data, float seconds)
 						maskPos.x += tf->maskingSourceXOffset;
 						maskPos.y += tf->maskingSourceYOffset;
 
-						obs_sceneitem_set_visible(
-							obs_scene_sceneitem_from_source(
-								maskingScene, maskingSource),
-							true);
-						obs_sceneitem_set_pos(
-							obs_scene_sceneitem_from_source(
-								maskingScene, maskingSource),
-							&maskPos);
+						obs_sceneitem_set_visible(maskingSceneItem, true);
+						obs_sceneitem_set_pos(maskingSceneItem, &maskPos);
 					} else {
-						obs_sceneitem_set_visible(
-							obs_scene_sceneitem_from_source(
-								maskingScene, maskingSource),
-							false);
+						obs_sceneitem_set_visible(maskingSceneItem, false);
 					}
+					obs_sceneitem_release(maskingSceneItem);
 				}
 				if (maskingSource) {
 					obs_source_release(maskingSource);

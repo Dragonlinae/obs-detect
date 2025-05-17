@@ -22,8 +22,11 @@ struct filter_data {
 	bool maskingEnabled;
 	std::string maskingType;
 	int maskingColor;
-	std::string maskingScene;
-	std::string maskingSource;
+	std::string maskingSceneName;
+	std::string maskingSourceName;
+	obs_scene_t *maskingScene;
+	obs_source_t *maskingSource;
+	obs_sceneitem_t *maskingSceneItem;
 	float maskingSourceXFac;
 	float maskingSourceYFac;
 	float maskingSourceXOffset;
