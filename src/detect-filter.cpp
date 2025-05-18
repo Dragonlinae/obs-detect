@@ -238,11 +238,11 @@ obs_properties_t *detect_filter_properties(void *data)
 	// add drop down selection for masking scene and source
 	obs_property_t *scene = obs_properties_add_list(masking_group, "masking_scene",
 							obs_module_text("MaskingScene"),
-							OBS_COMBO_TYPE_SCENE,
+							OBS_COMBO_TYPE_LIST,
 							OBS_COMBO_FORMAT_STRING);
 	obs_property_t *source = obs_properties_add_list(masking_group, "masking_source",
 							 obs_module_text("MaskingSource"),
-							 OBS_COMBO_TYPE_SOURCE,
+							 OBS_COMBO_TYPE_LIST,
 							 OBS_COMBO_FORMAT_STRING);
 	obs_property_t *sourcexfac = obs_properties_add_float_slider(
 		masking_group, "masking_source_xfac", obs_module_text("MaskingSourceXFac"), 0.0,
