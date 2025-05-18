@@ -44,7 +44,7 @@ Current features:
 - Face detection model, fast and efficient ([YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet))
 - Load custom ONNX detection models from disk
 - Filter by: Minimal Detection confidence, Object category (e.g. only "Person"), Object Minimal Size
-- Masking: Blur, Pixelate, Solid color, Transparent, output binary mask (combine with other plugins!)
+- Masking: Blur, Pixelate, Solid color, Source, Transparent, output binary mask (combine with other plugins!)
 - Tracking: Single object / Biggest / Oldest / All objects, Zoom factor, smooth transition
 - SORT algorithm for tracking smoothness and continuity
 - Save detections to file in real-time, for integrations e.g. with Streamer.bot
